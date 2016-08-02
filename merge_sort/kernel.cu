@@ -14,51 +14,32 @@ using namespace std::chrono;
 
 __device__ void merge(int * start_a,int * start_tmp,int count)
 {
-
+	int first_x;
+	int second_x;
 	int *current_first = start_a;
 	int *last_first = current_first + (count / 2);
 	int *current_second = start_a + (count / 2);
 	int *last_second = current_second + (count / 2);
-	int tmp;
+
+
 
 	for (int i = 0; i < count; i++)
 	{
-		if (current_first < last_first)
-		{
-			if (current_second < last_second)
-			{
-				if (current_first[0] < current_second[0])
-				{
-					tmp = current_first[0];
-					start_tmp[i] = tmp;
-					current_first += 1;
-				}
-				else
-				{
-					tmp = current_second[0];
-					start_tmp[i] = tmp;
-					current_second += 1;
-				}
-			}
-			else
-			{
-				tmp = current_first[0];
-				start_tmp[i] = tmp;
-				current_first += 1;
-			}
-		}
-		else
-		{
-			tmp = current_second[0];
-			start_tmp[i] = tmp;
-			current_second += 1;
-		}
+		second_x = current_second < last_second ? current_second[0] : 0x7FFFFFFF;
+		first_x = current_first < last_first ? current_first[0] : 0x7FFFFFFF;
+
+		start_tmp[i] = second_x < first_x ? second_x : first_x;
+		current_second = second_x < first_x ? current_second+1 : current_second;
+		current_first = second_x < first_x ? current_first : current_first+1;
+
 	}
 
 	for (int i = 0; i < count; i++)
 	{
 		start_a[i] = start_tmp[i];
 	}
+
+	return;
 }
 
 __global__ void kernel(int * da)
@@ -133,7 +114,6 @@ int main()
 
 	int * da; 
 	error = cudaHostGetDevicePointer(&da, table, 0);
-	//error = cudaMalloc(&d_tmp, TotalSize);
 
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
@@ -162,7 +142,7 @@ int main()
 		
 	}
 	
-	//cudaFree(da);
+	cudaFree(da);
 	cudaFreeHost(table);
 	
 
