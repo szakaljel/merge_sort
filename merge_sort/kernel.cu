@@ -72,13 +72,9 @@ __global__ void kernel(int * da)
 	int *start_a;
 	int *start_tmp;
 
-	if (tid == 0)
-	{
-		for (int i = 0; i < GLOBAL_ELEMENT_SIZE; i++)
-		{
-			tmp_memory[i] = da[i];
-		}
-	}
+	tmp_memory[2 * tid] = da[2 * tid];
+	tmp_memory[2 * tid + 1] = da[2 * tid + 1];
+
 	__syncthreads();
 	while (jump <= 2*blockDim.x)
 	{
@@ -87,20 +83,18 @@ __global__ void kernel(int * da)
 			start_a = tmp_memory + jump*tid;
 			start_tmp = swap_memory + jump*tid;
 			merge(start_a, start_tmp, jump);
-			__syncthreads();
+			
 			
 		}
 		activeThreads = activeThreads/2;
 		jump = jump*2;
+		__syncthreads();
 
 	}
-	if (tid == 0)
-	{
-		for (int i = 0; i < GLOBAL_ELEMENT_SIZE; i++)
-		{
-			da[i] = tmp_memory[i];
-		}
-	}
+	
+	da[2 * tid] = tmp_memory[2 * tid];
+	da[2 * tid + 1] = tmp_memory[2 * tid + 1];
+
 
 }
 
@@ -127,7 +121,7 @@ int main()
 
 	for (int i = 0; i < ElementCount; i++)
 	{
-		table[i] = rand() % 1000;
+		table[i] = rand() % 10000;
 	}
 	
 
@@ -162,7 +156,7 @@ int main()
 		
 	}
 	
-	//cudaFree(da);
+	cudaFree(da);
 	cudaFreeHost(table);
 	
 
