@@ -10,9 +10,11 @@ using namespace std;
 using namespace std::chrono;
 
 
+#define GLOBAL_ELEMENT_SIZE  1024
+
 __device__ void merge(int * start_a,int * start_tmp,int count)
 {
-	int elementsCompared = 0;
+
 	int *current_first = start_a;
 	int *last_first = current_first + (count / 2);
 	int *current_second = start_a + (count / 2);
@@ -25,7 +27,7 @@ __device__ void merge(int * start_a,int * start_tmp,int count)
 		{
 			if (current_second < last_second)
 			{
-				if (current_first[0] <= current_second[0])
+				if (current_first[0] < current_second[0])
 				{
 					tmp = current_first[0];
 					start_tmp[i] = tmp;
@@ -59,20 +61,31 @@ __device__ void merge(int * start_a,int * start_tmp,int count)
 	}
 }
 
-__global__ void kernel(int * da, int * d_tmp)
+__global__ void kernel(int * da)
 {
+	__shared__ int tmp_memory[GLOBAL_ELEMENT_SIZE];
+	__shared__ int swap_memory[GLOBAL_ELEMENT_SIZE];
+	
 	int tid = threadIdx.x;
 	int activeThreads = blockDim.x;
 	int jump = 2;
 	int *start_a;
 	int *start_tmp;
 
+	if (tid == 0)
+	{
+		for (int i = 0; i < GLOBAL_ELEMENT_SIZE; i++)
+		{
+			tmp_memory[i] = da[i];
+		}
+	}
+	__syncthreads();
 	while (jump <= 2*blockDim.x)
 	{
 		if (tid < activeThreads)
 		{
-			start_a = da + jump*tid;
-			start_tmp = d_tmp + jump*tid;
+			start_a = tmp_memory + jump*tid;
+			start_tmp = swap_memory + jump*tid;
 			merge(start_a, start_tmp, jump);
 			__syncthreads();
 			
@@ -80,6 +93,13 @@ __global__ void kernel(int * da, int * d_tmp)
 		activeThreads = activeThreads/2;
 		jump = jump*2;
 
+	}
+	if (tid == 0)
+	{
+		for (int i = 0; i < GLOBAL_ELEMENT_SIZE; i++)
+		{
+			da[i] = tmp_memory[i];
+		}
 	}
 
 }
@@ -93,7 +113,7 @@ int compare(const void * a, const void * b)
 int main()
 {
 
-	int ElementCount = 1024;
+	int ElementCount = GLOBAL_ELEMENT_SIZE;
 	int TotalSize = ElementCount * sizeof(int);
 	int *table;
 
@@ -111,9 +131,9 @@ int main()
 	}
 	
 
-	int * da, *d_tmp; 
+	int * da; 
 	error = cudaHostGetDevicePointer(&da, table, 0);
-	error = cudaMalloc(&d_tmp, TotalSize);
+	//error = cudaMalloc(&d_tmp, TotalSize);
 
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
@@ -121,7 +141,7 @@ int main()
 
 	cudaEventRecord(start);
 
-	kernel<<<1, ElementCount / 2 >>> (da, d_tmp);
+	kernel<<<1, ElementCount / 2 ,TotalSize*2>>> (da);
 
 	cudaEventRecord(stop);
 	cudaEventSynchronize(stop);
@@ -142,7 +162,7 @@ int main()
 		
 	}
 	
-	cudaFree(da);
+	//cudaFree(da);
 	cudaFreeHost(table);
 	
 
