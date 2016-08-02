@@ -25,12 +25,29 @@ __device__ void merge(int * start_a,int * start_tmp,int count)
 
 	for (int i = 0; i < count; i++)
 	{
-		second_x = current_second < last_second ? current_second[0] : 0x7FFFFFFF;
-		first_x = current_first < last_first ? current_first[0] : 0x7FFFFFFF;
-
-		start_tmp[i] = second_x < first_x ? second_x : first_x;
-		current_second = second_x < first_x ? current_second+1 : current_second;
-		current_first = second_x < first_x ? current_first : current_first+1;
+		if (current_second < last_second)
+		{
+			second_x =current_second[0];
+			first_x = current_first[0];
+		}
+		else
+		{
+			second_x = current_second[0];
+			first_x = current_first[0];
+		}
+		
+		if (second_x < first_x)
+		{
+			start_tmp[i] = second_x;
+			current_second =  current_second + 1;
+			current_first = current_first;
+		}
+		else
+		{
+			start_tmp[i] =  first_x;
+			current_second = current_second;
+			current_first = current_first + 1;
+		}
 
 	}
 
@@ -67,15 +84,12 @@ __global__ void kernel(int * da)
 			start_tmp = swap_memory + jump*tid;
 			merge(start_a, start_tmp, jump);
 			
-			
 		}
 		activeThreads = activeThreads/2;
 		jump = jump*2;
 		__syncthreads();
-
 	}
 
-	
 	da[2 * tid] = tmp_memory[2 * tid];
 	da[2 * tid + 1] = tmp_memory[2 * tid + 1];
 	
