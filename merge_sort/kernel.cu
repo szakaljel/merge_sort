@@ -103,8 +103,8 @@ __global__ void kernel(int * da)
 __global__ void kernel_second_merge(int * da, int* dtmp)
 {
 	
-	int tid = threadIdx.x;
-	int activeThreads = blockDim.x;
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+	int activeThreads = gridDim.x * blockDim.x;
 	int jump = CHUNK_ELEMENT_COUNT*2;
 	int *start_a;
 	int *start_tmp;
@@ -130,6 +130,21 @@ int compare(const void * a, const void * b)
 {
 	return (*(int*)a - *(int*)b);
 }
+
+
+bool is_sort(int* tab,int count)
+{
+	for(int i=0;i<count-1;i++)
+	{
+		if(tab[i]>tab[i+1])
+		{
+			cout<<i<<endl;
+			return false;
+		}
+	}
+	return true;
+}
+
 
 int main()
 {
@@ -163,27 +178,33 @@ int main()
 	int * dtmp;
 	error = cudaHostGetDevicePointer(&dtmp, result, 0);
 
-	cudaEvent_t start, stop;
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
+	//cudaEvent_t start, stop;
+	//cudaEventCreate(&start);
+	//cudaEventCreate(&stop);
 
-	cudaEventRecord(start);
+	//cudaEventRecord(start);
 
+	high_resolution_clock::time_point tt1 = high_resolution_clock::now();
 	kernel<<<ElementCount/ChunkCount, ChunkCount / 2 ,ChunkSize*2>>> (da);
 	kernel_second_merge<<<1,(ElementCount/ChunkCount)/2>>>(da,dtmp);
+	
+	cudaThreadSynchronize();
+	high_resolution_clock::time_point tt2 = high_resolution_clock::now();
 
-	cudaEventRecord(stop);
-	cudaEventSynchronize(stop);
+	//cudaEventRecord(stop);
+	//cudaEventSynchronize(stop);
 
-	float duration;
+	//float duration;
+	auto duration = duration_cast<milliseconds>(tt2 - tt1).count();
 
-	cudaEventElapsedTime(&duration, start, stop);
+	//cudaEventElapsedTime(&duration, start, stop);
+	
 
-	cout << duration << " ms" << endl;
+	cout << duration << " ms" << "  sort: "<<is_sort(table,ElementCount)<< endl;
 
-	/*for (int i = 0; i < 2048; i++)
+	/*for (int i = 0; i < 8096; i++)
 	{
-		if (i % 8 == 0)
+		if (i % 16 == 0)
 		{
 			cout << endl;
 		}
@@ -214,7 +235,7 @@ int main()
 
 	auto duration2 = duration_cast<milliseconds>(t2 - t1).count();
 
-	cout << duration2 <<" ms"<<endl;
+	cout << duration2 << " ms" << "  sort: "<<is_sort(table,ElementCount)<< endl;
 
 	/*for (int i = 0; i < ElementCount; i++)
 	{
