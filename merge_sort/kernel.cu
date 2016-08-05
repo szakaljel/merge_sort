@@ -11,7 +11,7 @@ using namespace std::chrono;
 
 
 #define CHUNK_ELEMENT_COUNT  2048
-#define FULL_ELEMENT_COUNT 128 * CHUNK_ELEMENT_COUNT
+#define FULL_ELEMENT_COUNT 1024 * CHUNK_ELEMENT_COUNT
 
 __device__ void merge(int * start_a,int * start_tmp,int count)
 {
@@ -62,7 +62,7 @@ __device__ void merge(int * start_a,int * start_tmp,int count)
 	}
 }
 
-__global__ void kernel(int * da)
+__global__ void kernel_first_merge(int * da)
 {
 	__shared__ int tmp_memory[CHUNK_ELEMENT_COUNT];
 	__shared__ int swap_memory[CHUNK_ELEMENT_COUNT];
@@ -100,15 +100,16 @@ __global__ void kernel(int * da)
 
 }
 
-__global__ void kernel_second_merge(int * da, int* dtmp)
+__global__ void kernel_second_merge(int * da, int* dtmp, int init_jump, int levels)
 {
 	
 	int tid = blockIdx.x * blockDim.x + threadIdx.x;
 	int activeThreads = gridDim.x * blockDim.x;
-	int jump = CHUNK_ELEMENT_COUNT*2;
+	int jump = init_jump;
 	int *start_a;
 	int *start_tmp;
-	while (jump <= FULL_ELEMENT_COUNT)
+	int lvl = levels;
+	while (jump <= FULL_ELEMENT_COUNT && activeThreads > 0 && lvl> 0)
 	{
 		if (tid < activeThreads)
 		{
@@ -120,6 +121,7 @@ __global__ void kernel_second_merge(int * da, int* dtmp)
 		}
 		activeThreads = activeThreads/2;
 		jump = jump*2;
+		lvl--;
 		__syncthreads();
 
 	}
@@ -158,6 +160,7 @@ int main()
 
 	cudaError_t error;
 	cudaSetDevice(0);
+	//cudaDeviceReset();
 	cudaSetDevice(cudaDeviceMapHost);
 
 	error = cudaHostAlloc(&table, FullSize, cudaHostAllocMapped);
@@ -173,10 +176,11 @@ int main()
 
 
 	int * da; 
-	error = cudaHostGetDevicePointer(&da, table, 0);
-	
 	int * dtmp;
+	error = cudaHostGetDevicePointer(&da, table, 0);
 	error = cudaHostGetDevicePointer(&dtmp, result, 0);
+	
+	
 
 	//cudaEvent_t start, stop;
 	//cudaEventCreate(&start);
@@ -185,10 +189,19 @@ int main()
 	//cudaEventRecord(start);
 
 	high_resolution_clock::time_point tt1 = high_resolution_clock::now();
-	kernel<<<ElementCount/ChunkCount, ChunkCount / 2 ,ChunkSize*2>>> (da);
-	kernel_second_merge<<<1,(ElementCount/ChunkCount)/2>>>(da,dtmp);
+	kernel_first_merge<<<ElementCount/ChunkCount, ChunkCount / 2 ,ChunkSize*2>>> (da);
+	cudaDeviceSynchronize();
+	kernel_second_merge<<<4,(ElementCount/ChunkCount)/8>>>(da,dtmp,ChunkCount*2,5);
+	cudaDeviceSynchronize();
+	kernel_second_merge<<<1,16>>>(da,dtmp,ElementCount/16,7);
+	cudaDeviceSynchronize();
+	error = cudaGetLastError();
+	cout<< (int)error<<endl;
 	
-	cudaThreadSynchronize();
+	
+	
+	//kernel_second_merge<<<1,/*(ElementCount/ChunkCount)/2*/2>>>(da,dtmp,CHUNK_ELEMENT_COUNT*2*64);
+	//cudaThreadSynchronize();
 	high_resolution_clock::time_point tt2 = high_resolution_clock::now();
 
 	//cudaEventRecord(stop);
@@ -199,10 +212,14 @@ int main()
 
 	//cudaEventElapsedTime(&duration, start, stop);
 	
+	for(int i = 0 ; i<ElementCount ;i+=ElementCount/8)
+	{
+		cout<<i<<" --> "<<is_sort(table+i,ElementCount/8)<<endl;
+	}
 
 	cout << duration << " ms" << "  sort: "<<is_sort(table,ElementCount)<< endl;
 
-	/*for (int i = 0; i < 8096; i++)
+	/*for (int i = ElementCount/4 ; i < ElementCount/4+4096; i++)
 	{
 		if (i % 16 == 0)
 		{
