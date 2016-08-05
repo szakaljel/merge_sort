@@ -11,7 +11,7 @@ using namespace std::chrono;
 
 
 #define CHUNK_ELEMENT_COUNT  1024
-#define FULL_ELEMENT_COUNT 2 * CHUNK_ELEMENT_COUNT
+#define FULL_ELEMENT_COUNT 64 * CHUNK_ELEMENT_COUNT
 
 __device__ void merge(int * start_a,int * start_tmp,int count)
 {
@@ -68,22 +68,22 @@ __global__ void kernel(int * da)
 	__shared__ int swap_memory[CHUNK_ELEMENT_COUNT];
 	
 	int tid = threadIdx.x;
-	int offset = blockIdx.x * CHUNK_ELEMENT_COUNT * sizeof(int);
+	int offset = blockIdx.x * CHUNK_ELEMENT_COUNT;
 	int activeThreads = blockDim.x;
 	int jump = 2;
 	int *start_a;
 	int *start_tmp;
 
-	tmp_memory[2 * tid+offset] = da[2 * tid+offset];
-	tmp_memory[2 * tid + 1 + offset] = da[2 * tid + 1+offset];
+	tmp_memory[2 * tid] = da[2 * tid+offset];
+	tmp_memory[2 * tid + 1] = da[2 * tid + 1+offset];
 
 	__syncthreads();
 	while (jump <= 2*blockDim.x)
 	{
 		if (tid < activeThreads)
 		{
-			start_a = tmp_memory + jump*tid + offset;
-			start_tmp = swap_memory + jump*tid + offset;
+			start_a = tmp_memory + jump*tid;
+			start_tmp = swap_memory + jump*tid;
 			merge(start_a, start_tmp, jump);
 			
 			
@@ -94,8 +94,8 @@ __global__ void kernel(int * da)
 
 	}
 	
-	da[2 * tid + offset] = tmp_memory[2 * tid + offset];
-	da[2 * tid + 1 + offset] = tmp_memory[2 * tid + 1 + offset];
+	da[2 * tid + offset] = tmp_memory[2 * tid];
+	da[2 * tid + 1 + offset] = tmp_memory[2 * tid + 1];
 
 
 }
@@ -150,7 +150,7 @@ int main()
 
 	cout << duration << " ms" << endl;
 
-	for (int i = 0; i < ElementCount; i++)
+	/*for (int i = 0; i < ElementCount; i++)
 	{
 		if (i % 8 == 0)
 		{
@@ -158,7 +158,7 @@ int main()
 		}
 		cout << table[i] << "  ";
 		
-	}
+	}*/
 	
 	cudaFree(da);
 	cudaFreeHost(table);
