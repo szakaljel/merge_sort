@@ -10,8 +10,8 @@ using namespace std;
 using namespace std::chrono;
 
 
-#define CHUNK_ELEMENT_COUNT  1024
-#define FULL_ELEMENT_COUNT 64 * CHUNK_ELEMENT_COUNT
+#define CHUNK_ELEMENT_COUNT  2048
+#define FULL_ELEMENT_COUNT 128 * CHUNK_ELEMENT_COUNT
 
 __device__ void merge(int * start_a,int * start_tmp,int count)
 {
@@ -100,6 +100,31 @@ __global__ void kernel(int * da)
 
 }
 
+__global__ void kernel_second_merge(int * da, int* dtmp)
+{
+	
+	int tid = threadIdx.x;
+	int activeThreads = blockDim.x;
+	int jump = CHUNK_ELEMENT_COUNT*2;
+	int *start_a;
+	int *start_tmp;
+	while (jump <= FULL_ELEMENT_COUNT)
+	{
+		if (tid < activeThreads)
+		{
+			start_a = da + jump*tid;
+			start_tmp = dtmp + jump*tid;
+			merge(start_a, start_tmp, jump);
+			
+			
+		}
+		activeThreads = activeThreads/2;
+		jump = jump*2;
+		__syncthreads();
+
+	}
+
+}
 
 int compare(const void * a, const void * b)
 {
@@ -114,24 +139,29 @@ int main()
 	int FullSize = ElementCount * sizeof(int);
 	int ChunkSize = ChunkCount * sizeof(int);
 	int *table;
+	int * result;
 
 	cudaError_t error;
 	cudaSetDevice(0);
 	cudaSetDevice(cudaDeviceMapHost);
 
 	error = cudaHostAlloc(&table, FullSize, cudaHostAllocMapped);
-	
+	error = cudaHostAlloc(&result, FullSize, cudaHostAllocMapped);
+
 	srand(time(0));
 
 	for (int i = 0; i < ElementCount; i++)
 	{
-		table[i] = rand() % 10000;
+		table[i] = rand() % 1000000;
 	}
 	
 
+
 	int * da; 
 	error = cudaHostGetDevicePointer(&da, table, 0);
-	//error = cudaMalloc(&d_tmp, FullSize);
+	
+	int * dtmp;
+	error = cudaHostGetDevicePointer(&dtmp, result, 0);
 
 	cudaEvent_t start, stop;
 	cudaEventCreate(&start);
@@ -140,6 +170,7 @@ int main()
 	cudaEventRecord(start);
 
 	kernel<<<ElementCount/ChunkCount, ChunkCount / 2 ,ChunkSize*2>>> (da);
+	kernel_second_merge<<<1,(ElementCount/ChunkCount)/2>>>(da,dtmp);
 
 	cudaEventRecord(stop);
 	cudaEventSynchronize(stop);
@@ -150,7 +181,7 @@ int main()
 
 	cout << duration << " ms" << endl;
 
-	/*for (int i = 0; i < ElementCount; i++)
+	/*for (int i = 0; i < 2048; i++)
 	{
 		if (i % 8 == 0)
 		{
@@ -162,15 +193,18 @@ int main()
 	
 	cudaFree(da);
 	cudaFreeHost(table);
+
+	cudaFree(dtmp);
+	cudaFreeHost(result);
 	
 
 	getchar();
 
-	/*table = new int[ElementCount];
+	table = new int[ElementCount];
 
 	for (int i = 0; i < ElementCount; i++)
 	{
-		table[i] = rand() % 1000;
+		table[i] = rand() % 1000000;
 	}
 
 
@@ -181,7 +215,7 @@ int main()
 	auto duration2 = duration_cast<milliseconds>(t2 - t1).count();
 
 	cout << duration2 <<" ms"<<endl;
-	*/
+
 	/*for (int i = 0; i < ElementCount; i++)
 	{
 		if (i % 8 == 0)
@@ -193,9 +227,9 @@ int main()
 	}*/
 	
 
-/*	delete[] table;
+	delete[] table;
 
 	getchar();
-	*/
+	
     return 0;
 }
